@@ -1,4 +1,3 @@
-import { Donation } from '@prisma/client';
 import { DonationType } from '../_enums/donation-type';
 
 export interface ItemDonation {

@@ -5,6 +5,7 @@ import {
   useEffect,
   useContext,
   ReactNode,
+  useCallback,
 } from 'react';
 
 import { CurrentCampaign } from '../interfaces';
@@ -27,12 +28,12 @@ export const CampaignProvider = ({ children }: CampaignProviderProps) => {
   const [campaign, setCampaign] = useState<CurrentCampaign | null>(null);
   const [isValidCampaign, setIsValidCampaign] = useState(false);
 
-  const getCampaign = async () => {
+  const getCampaign = useCallback(async () => {
     if (campaign) return;
 
     const currentCampaign = await getCurrentCampaign();
     if (currentCampaign) setCampaign(currentCampaign);
-  };
+  }, [campaign]);
 
   useEffect(() => {
     const fetch = async () => {
@@ -40,7 +41,7 @@ export const CampaignProvider = ({ children }: CampaignProviderProps) => {
     };
 
     fetch();
-  }, []);
+  }, [getCampaign]);
 
   useEffect(() => {
     if (campaign && campaign.active) {

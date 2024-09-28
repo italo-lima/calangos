@@ -312,8 +312,8 @@ export default function Campaign() {
               </CardTitle>
               <CardContent className="text-xs font-light text-center mt-2">
                 Opte por doar uma cesta completa ou selecione itens individuais
-                do catálogo. Após escolher os produtos, clique em "Realizar
-                Doação"
+                do catálogo. Após escolher os produtos, clique em Realizar
+                Doação
               </CardContent>
             </Card>
             <Card className="pt-4 flex flex-col items-center">
