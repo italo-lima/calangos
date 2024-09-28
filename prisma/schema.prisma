@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Campaign {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  active      Boolean
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  Basket      Basket?
+  Donation    Donation[]
+
+  @@map("campaigns")
+}
+
+model Product {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  price             Int
+  img               String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  ProductInBasket   ProductInBasket[]
+  ProductInDonation ProductInDonation[]
+
+  @@map("products")
+}
+
+model Basket {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  description     String
+  campaignId      String            @unique @db.ObjectId
+  campaign        Campaign          @relation(fields: [campaignId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProductInBasket ProductInBasket[]
+
+  @@map("baskets")
+}
+
+model Donation {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  donor             String?
+  total             Float
+  transactionId     String
+  campaignId        String              @db.ObjectId
+  donationType      DonationType
+  ProductInDonation ProductInDonation[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@map("donations")
+}
+
+model ProductInBasket {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  productId String @db.ObjectId
+  basketId  String @db.ObjectId
+  quantity  Int
+
+  product Product @relation(fields: [productId], references: [id])
+  basket  Basket  @relation(fields: [basketId], references: [id])
+}
+
+model ProductInDonation {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String @db.ObjectId
+  donationId String @db.ObjectId
+  quantity   Int
+
+  product  Product  @relation(fields: [productId], references: [id])
+  donation Donation @relation(fields: [donationId], references: [id])
+}
+
+enum DonationType {
+  products
+  basket
+}

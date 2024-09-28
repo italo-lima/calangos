@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Controller, SubmitHandler, useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
+import QRCode from 'qrcode';
 
 import {
   Card,
@@ -13,229 +14,346 @@ import {
 } from '../_components/ui/card';
 import { Button } from '../_components/ui/button';
 import { Input } from '../_components/ui/input';
-
-interface Product {
-  id: number;
-  name: string;
-  code: string;
-  price: number;
-  img: string;
-}
-
-interface ItemBasket extends Product {
-  value: number;
-}
-
-const products: Product[] = [
-  { id: 1, name: 'Cuscuz', price: 4, code: 'couscous', img: '/milk.png' },
-  {
-    id: 2,
-    name: 'Farinha de Mandioca',
-    price: 7,
-    code: 'cassavaFlour',
-    img: '/milk.png',
-  },
-  { id: 3, name: 'Café (1kg)', price: 10, code: 'coffee', img: '/milk.png' },
-  {
-    id: 4,
-    name: 'Feijão Carioca',
-    price: 6,
-    code: 'cariocaBeans',
-    img: '/milk.png',
-  },
-  {
-    id: 5,
-    name: 'Macarrão Brandini',
-    price: 4,
-    code: 'brandiniPasta',
-    img: '/milk.png',
-  },
-  {
-    id: 6,
-    name: 'Leite em pó',
-    price: 7,
-    code: 'powderedMilk',
-    img: '/milk.png',
-  },
-  {
-    id: 7,
-    name: 'Arroz parbolizado',
-    price: 6,
-    code: 'parboiledRice',
-    img: '/milk.png',
-  },
-  { id: 8, name: 'Aroz branco', price: 7, code: 'whiteRice', img: '/milk.png' },
-  {
-    id: 9,
-    name: 'Sal Campeão',
-    price: 1,
-    code: 'championSalt',
-    img: '/milk.png',
-  },
-  { id: 10, name: 'Açúcar', price: 5, code: 'sugar', img: '/milk.png' },
-  {
-    id: 11,
-    name: 'Molho Sache',
-    price: 3,
-    code: 'sauceSachet',
-    img: '/milk.png',
-  },
-  { id: 12, name: 'Sardinha', price: 1, code: 'sardine', img: '/milk.png' },
-  { id: 13, name: 'Biscoito', price: 6, code: 'biscuit', img: '/milk.png' },
-  { id: 14, name: 'Suco', price: 1, code: 'juice', img: '/milk.png' },
-];
+import { DialogIdentification } from '../_components/DialogIdentification';
+import { DialogQrCode } from '../_components/DialogQrCode';
+import { getProducts } from '../_actions/get-products';
+import {
+  CreateDonation,
+  IForm,
+  InputForm,
+  ItemDonation,
+  Product,
+} from '../interfaces';
+import { createDonation } from '../_actions/create-donation';
+import { createProductInDonation } from '../_actions/create-product-donation';
+import { DonationType } from '../_enums/donation-type';
+import { useCampaign } from '../_hooks/useCampaign';
 
 const schemaBasket = yup.object().shape({
   products: yup
     .array()
     .of(
       yup.object().shape({
-        id: yup.number().required(),
-        value: yup.number().min(0, 'O valor não pode ser negativo'),
+        id: yup.string().required(),
+        quantity: yup.number().required(),
       })
     )
+    .required()
     .test(
       'at-least-one-greater-than-zero',
       'Pelo menos um produto deve ter valor maior que 0',
       (values) =>
-        values?.some((product) => (product?.value ? product.value > 0 : false))
+        values.some((product) =>
+          product.quantity ? product.quantity > 0 : false
+        )
     ),
 });
 
 export default function Campaign() {
+  const { campaign } = useCampaign();
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [initialValues, setInitialValues] = useState<InputForm[]>([]);
+
   const {
     control,
     handleSubmit,
+    reset,
     formState: { errors, isValid },
   } = useForm({
     resolver: yupResolver(schemaBasket),
     mode: 'onChange',
     defaultValues: {
-      products: products.map((product) => ({ id: product.id, value: 0 })),
+      products: initialValues,
     },
   });
 
-  const [qrCode, setQrCode] = useState('');
-  const [anonymous, setAnonymous] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [dataToQrCode, setDataToQrCode] = useState<any>({});
+  const [isOpenIdentificationDialog, setIsOpenIdentificationDialog] =
+    useState(false);
+  const [isOpenQrCodeDialog, setIsOpenQrCodeDialog] = useState(false);
+  const [itemsDonation, setItemsDonation] = useState<ItemDonation[]>([]);
 
-  const onSubmit = (data: any) => {
-    console.log(data);
+  const toggleIdentificationDialog = () =>
+    setIsOpenIdentificationDialog((oldState) => !oldState);
+
+  const toggleQrCodeDialog = () => {
+    reset();
+    setIsOpenQrCodeDialog((oldState) => !oldState);
   };
 
+  const createNewDonation = async ({
+    itemsDonation,
+    total,
+    donor,
+    donationType,
+    transactionId,
+  }: CreateDonation) => {
+    const donation = await createDonation({
+      donor,
+      total,
+      transactionId,
+      donationType,
+      campaignId: campaign?.id!,
+    });
+
+    await Promise.all(
+      itemsDonation.map((item) =>
+        createProductInDonation({
+          donationId: donation.id,
+          productId: item.productId,
+          quantity: item.quantity,
+        })
+      )
+    );
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(null);
+      }, 2000);
+    });
+  };
+
+  const createPixCharge = async (total: number) => {
+    const body = {
+      calendario: { expiracao: 3600 },
+      valor: { original: total },
+      chave: 'chave-pix',
+      solicitacaoPagador: 'Doação',
+    };
+
+    const response = {
+      chave: 'd69a7123-9630-4304-9ca2-7cfe8408def9',
+      solicitacaoPagador: 'Doação de Alimento',
+      pixCopiaECola:
+        '00020101021226990014br.gov.bcb.pix2577qrcode-h.c6pix.com/qrs1/v2/01zLZyvddi3vN6eGAwxlmwTT3dAKpOWhmpdDVMGA08kv0PRrEp520400005303986540537.005802BR5916REGRESSIVO TESTE6009Sao Paulo62070503***6304EF83',
+      calendario: {
+        criacao: '2024-09-28T22:22:05.820Z',
+        expiracao: 3600,
+      },
+      txid: 'QRS1TXF1A9ZH0LHEUH8KGJVZS0BYHCDPD4V',
+      revisao: 0,
+      location:
+        'qrcode-h.c6pix.com/qrs1/v2/01zLZyvddi3vN6eGAwxlmwTT3dAKpOWhmpdDVMGA08kv0PRrEp',
+      status: 'ATIVA',
+      valor: {
+        original: total,
+        modalidadeAlteracao: 0,
+      },
+    };
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(response);
+      }, 2000);
+    });
+  };
+
+  const generateQrCode = async (name: string) => {
+    try {
+      setLoading(true);
+      const total = itemsDonation.reduce(
+        (previous, current) => previous + current.value,
+        0
+      );
+
+      const pixCharge: any = await createPixCharge(total);
+
+      await createNewDonation({
+        donationType: DonationType.PRODUCTS,
+        itemsDonation,
+        total,
+        transactionId: pixCharge.txid,
+        donor: name,
+      });
+
+      const qrCodeUrl = await QRCode.toDataURL(pixCharge.pixCopiaECola);
+
+      setDataToQrCode({
+        url: qrCodeUrl,
+        data: pixCharge,
+      });
+      setIsOpenIdentificationDialog(false);
+      setIsOpenQrCodeDialog(true);
+      setLoading(false);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const onSubmit: SubmitHandler<IForm> = (data) => {
+    const itemsDonation: ItemDonation[] = [];
+
+    for (let index = 0; index < data.products.length; index++) {
+      const item = data.products[index];
+
+      if (item.quantity <= 0) continue;
+
+      const product = products.find(
+        (product) => product.id === String(item.id)
+      );
+
+      if (!product) return;
+
+      itemsDonation.push({
+        productId: product.id,
+        quantity: item.quantity,
+        value: Number(product.price) * Number(item.quantity),
+      });
+    }
+
+    setItemsDonation(itemsDonation);
+    setIsOpenIdentificationDialog(true);
+  };
+
+  useEffect(() => {
+    const fetch = async () => {
+      const products = await getProducts();
+      setInitialValues(
+        products.map((product) => ({ id: product.id, quantity: 0 }))
+      );
+      setProducts(products);
+    };
+
+    fetch();
+  }, []);
+
+  useEffect(() => {
+    if (initialValues) {
+      reset({
+        products: initialValues,
+      });
+    }
+  }, [initialValues, reset]);
+
   return (
-    <div className="relative w-full py-10 px-4">
-      <div>
-        <h1 className="font-bold text-4xl">
-          Trilhe e transforme <br />
-          vidas com cada passo
-        </h1>
-        <p className="mt-4 text-xs">
-          Cada trilha que você completa ajuda a fornecer alimentos para quem
-          precisa. Conquiste novos caminhos e faça a diferença
-        </p>
-        <Button className="mt-4 bg-primary">Doar uma cesta</Button>
-      </div>
-      <div className="relative h-72 w-full flex justify-start mt-4">
-        <Image alt="Logo da Calango" src="/trip.svg" fill />
-      </div>
-      <div className="rounded-2xl bg-primary my-8 py-8 px-4">
-        <h3 className="text-gray-50 text-base text-center pb-4">
-          Como funciona
-        </h3>
-        <div className="flex flex-col gap-4">
-          <Card className="pt-4 flex flex-col items-center">
-            <div className="relative h-16 w-16 flex justify-start mt-4">
-              <Image alt="Logo da Calango" src="/grocery.png" fill />
+    <>
+      <DialogIdentification
+        loading={loading}
+        isOpen={isOpenIdentificationDialog}
+        openChange={toggleIdentificationDialog}
+        callback={generateQrCode}
+      />
+      <DialogQrCode
+        isOpen={isOpenQrCodeDialog}
+        openChange={toggleQrCodeDialog}
+        dataPix={dataToQrCode}
+      />
+      <div className="relative w-full py-10 px-4">
+        <div>
+          <h1 className="font-bold text-4xl">
+            Trilhe e transforme <br />
+            vidas com cada passo
+          </h1>
+          <p className="mt-4 text-xs">
+            Cada trilha que você completa ajuda a fornecer alimentos para quem
+            precisa. Conquiste novos caminhos e faça a diferença
+          </p>
+          <Button className="mt-4 bg-primary">Doar uma cesta</Button>
+        </div>
+        <div className="relative h-72 w-full flex justify-start mt-4">
+          <Image alt="Logo da Calango" src="/trip.svg" fill />
+        </div>
+        <div className="rounded-2xl bg-primary my-8 py-8 px-4">
+          <h3 className="text-gray-50 text-base text-center pb-4">
+            Como funciona
+          </h3>
+          <div className="flex flex-col gap-4">
+            <Card className="pt-4 flex flex-col items-center">
+              <div className="relative h-16 w-16 flex justify-start mt-4">
+                <Image alt="Logo da Calango" src="/grocery.png" fill />
+              </div>
+              <CardTitle className="text-base mt-4">
+                Escolha a forma de doação
+              </CardTitle>
+              <CardContent className="text-xs font-light text-center mt-2">
+                Opte por doar uma cesta completa ou selecione itens individuais
+                do catálogo. Após escolher os produtos, clique em "Realizar
+                Doação"
+              </CardContent>
+            </Card>
+            <Card className="pt-4 flex flex-col items-center">
+              <div className="relative h-16 w-16 flex justify-start mt-4">
+                <Image alt="Logo da Calango" src="/qrcode.png" fill />
+              </div>
+              <CardTitle className="text-base mt-4">
+                Escanei o QrCode gerado
+              </CardTitle>
+              <CardContent className="text-xs font-light text-center mt-2">
+                Pegue seu celular, escaneie o QR Code gerado e confirme a doação
+                com o valor correspondente aos produtos selecionados
+              </CardContent>
+            </Card>
+            <Card className="pt-4 flex flex-col items-center">
+              <div className="relative h-16 w-16 flex justify-start mt-4">
+                <Image alt="Logo da Calango" src="/confirmation.png" fill />
+              </div>
+              <CardTitle className="text-base mt-4">Doação realizada</CardTitle>
+              <CardContent className="text-xs font-light text-center mt-2">
+                Pronto, você acabou de ajudar a transformar vidas com sua doação
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold mb-4">Catálogo</h1>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="grid grid-cols-2 gap-2">
+              {products.map((product, index) => (
+                <Card key={product.id}>
+                  <CardContent className="pt-4 flex flex-col items-center">
+                    <div className="relative h-16 w-16">
+                      <Image
+                        alt={product.name}
+                        src={product.img}
+                        fill
+                        objectFit="contain"
+                      />
+                    </div>
+                    <p className="text-xs mt-2">{product.name}</p>
+                    <p className="text-xs font-bold">
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                        minimumFractionDigits: 2,
+                      }).format(product.price)}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="flex-col">
+                    <p className="flex items-center text-xs">
+                      Quantidade:{' '}
+                      <Controller
+                        name={`products.${index}.quantity`}
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            type="number"
+                            className="w-10 h-6 ml-2"
+                            {...field}
+                          />
+                        )}
+                      />
+                    </p>
+                    {errors?.products?.[index]?.quantity && (
+                      <p className="text-xs text-center mt-2 text-red-500">
+                        Valor precisar ser maior ou igual a 0
+                      </p>
+                    )}
+                  </CardFooter>
+                </Card>
+              ))}
+              <Button
+                type="submit"
+                disabled={!isValid}
+                className="bg-primary max-w-40"
+              >
+                Realizar doação
+              </Button>
             </div>
-            <CardTitle className="text-base mt-4">
-              Escolha a forma de doação
-            </CardTitle>
-            <CardContent className="text-xs font-light text-center mt-2">
-              Opte por doar uma cesta completa ou selecione itens individuais do
-              catálogo. Após escolher os produtos, clique em "Realizar Doação"
-            </CardContent>
-          </Card>
-          <Card className="pt-4 flex flex-col items-center">
-            <div className="relative h-16 w-16 flex justify-start mt-4">
-              <Image alt="Logo da Calango" src="/qrcode.png" fill />
-            </div>
-            <CardTitle className="text-base mt-4">
-              Escanei o QrCode gerado
-            </CardTitle>
-            <CardContent className="text-xs font-light text-center mt-2">
-              Pegue seu celular, escaneie o QR Code gerado e confirme a doação
-              com o valor correspondente aos produtos selecionados
-            </CardContent>
-          </Card>
-          <Card className="pt-4 flex flex-col items-center">
-            <div className="relative h-16 w-16 flex justify-start mt-4">
-              <Image alt="Logo da Calango" src="/confirmation.png" fill />
-            </div>
-            <CardTitle className="text-base mt-4">Doação realizada</CardTitle>
-            <CardContent className="text-xs font-light text-center mt-2">
-              Pronto, você acabou de ajudar a transformar vidas com sua doação
-            </CardContent>
-          </Card>
+          </form>
         </div>
       </div>
-      <div>
-        <h1 className="text-xl font-semibold mb-4">Catálogo</h1>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-2 gap-2">
-            {products.map((product, index) => (
-              <Card key={product.id}>
-                <CardContent className="pt-4 flex flex-col items-center">
-                  <div className="relative h-16 w-16">
-                    <Image
-                      alt={product.name}
-                      src={product.img}
-                      fill
-                      objectFit="contain"
-                    />
-                  </div>
-                  <p className="text-xs mt-2">{product.name}</p>
-                  <p className="text-xs font-bold">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                      minimumFractionDigits: 2,
-                    }).format(product.price)}
-                  </p>
-                </CardContent>
-                <CardFooter className="flex-col">
-                  <p className="flex items-center text-xs">
-                    Quantidade:{' '}
-                    <Controller
-                      name={`products.${index}.value`}
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          type="number"
-                          className="w-10 h-6 ml-2"
-                          {...field}
-                        />
-                      )}
-                    />
-                  </p>
-                  {errors?.products?.[index]?.value && (
-                    <p className="text-xs text-center mt-2 text-red-500">
-                      Valor precisar ser maior ou igual a 0
-                    </p>
-                  )}
-                </CardFooter>
-              </Card>
-            ))}
-            <Button
-              type="submit"
-              disabled={!isValid}
-              className="bg-primary max-w-40"
-            >
-              Realizar doação
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    </>
   );
 }

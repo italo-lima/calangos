@@ -4,6 +4,7 @@ import './globals.css';
 import 'react-slideshow-image/dist/styles.css';
 import { Header } from './_components/header';
 import { Footer } from './_components/footer';
+import { CampaignProvider } from './_hooks/useCampaign';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -27,14 +28,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased scroll-smooth`}
-      >
-        <Header />
-        {children}
-        <Footer />
-      </body>
-    </html>
+    <CampaignProvider>
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased scroll-smooth`}
+        >
+          <Header />
+          {children}
+          <Footer />
+        </body>
+      </html>
+    </CampaignProvider>
   );
 }

@@ -18,8 +18,11 @@ import {
   BookImage,
 } from 'lucide-react';
 import Image from 'next/image';
+import { useCampaign } from '@/app/_hooks/useCampaign';
 
 export const Header = () => {
+  const { campaign, isValidCampaign } = useCampaign();
+
   return (
     <div className="shadow-nonew-full rounded-none border-none bg-transparent h-12">
       <Card className="flex items-center rounded-none shadow-none border-none bg-transparent h-full">
@@ -80,18 +83,20 @@ export const Header = () => {
                     </Link>
                   </Button>
                 </SheetClose>
-                <SheetClose asChild>
-                  <Button
-                    className="justify-start gap-2"
-                    variant="ghost"
-                    asChild
-                  >
-                    <Link href="/campaign">
-                      <ShoppingBasket size={18} />
-                      Campanha
-                    </Link>
-                  </Button>
-                </SheetClose>
+                {isValidCampaign && (
+                  <SheetClose asChild>
+                    <Button
+                      className="justify-start gap-2"
+                      variant="ghost"
+                      asChild
+                    >
+                      <Link href="/campaign">
+                        <ShoppingBasket size={18} />
+                        {campaign?.name}
+                      </Link>
+                    </Button>
+                  </SheetClose>
+                )}
               </div>
             </SheetContent>
           </Sheet>
