@@ -4,7 +4,7 @@ import { AboutUs } from './_components/about-us';
 import { Gallery } from './_components/gallery';
 import { Campaign } from './_components/campaign';
 import { MoreAdventures } from './_components/more-adventures';
-import { useCampaign } from './_hooks/useCampaign';
+import { useCampaign } from './hooks/use-campaign';
 
 export default function Home() {
   const { isValidCampaign } = useCampaign();

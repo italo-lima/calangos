@@ -27,7 +27,10 @@ import {
 import { createDonation } from '../_actions/create-donation';
 import { createProductInDonation } from '../_actions/create-product-donation';
 import { DonationType } from '../_enums/donation-type';
-import { useCampaign } from '../_hooks/useCampaign';
+import { getBasketByCampaignId } from '../_actions/get-basket-by-campaign-id';
+import { useToast } from '../hooks/use-toast';
+import { useCampaign } from '../hooks/use-campaign';
+import { getProductsByBasketId } from '../_actions/get-products-by-basket-id';
 
 const schemaBasket = yup.object().shape({
   products: yup
@@ -51,9 +54,11 @@ const schemaBasket = yup.object().shape({
 
 export default function Campaign() {
   const { campaign } = useCampaign();
+  const { toast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [initialValues, setInitialValues] = useState<InputForm[]>([]);
+  const [isDonationBasket, setIsDonationBasket] = useState(false);
 
   const {
     control,
@@ -161,7 +166,9 @@ export default function Campaign() {
       const pixCharge: any = await createPixCharge(total);
 
       await createNewDonation({
-        donationType: DonationType.PRODUCTS,
+        donationType: isDonationBasket
+          ? DonationType.BASKET
+          : DonationType.PRODUCTS,
         itemsDonation,
         total,
         transactionId: pixCharge.txid,
@@ -177,8 +184,13 @@ export default function Campaign() {
       setIsOpenIdentificationDialog(false);
       setIsOpenQrCodeDialog(true);
       setLoading(false);
-    } catch (e) {
-      console.log(e);
+      setIsDonationBasket(false);
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível gerar o QrCode',
+        description: 'Estamos passando por uma instabilidade',
+      });
     }
   };
 
@@ -203,7 +215,36 @@ export default function Campaign() {
       });
     }
 
+    setIsDonationBasket(false);
     setItemsDonation(itemsDonation);
+    setIsOpenIdentificationDialog(true);
+  };
+
+  const donateBasket = async () => {
+    const basket = await getBasketByCampaignId(campaign?.id!);
+
+    if (!basket) {
+      return toast({
+        variant: 'destructive',
+        title: 'Não foi possível realizar essa ação',
+        description: 'Estamos passando por uma instabilidade',
+      });
+    }
+
+    const productsBasket = await getProductsByBasketId(basket.id);
+
+    const items = productsBasket.map((item) => {
+      const product = item.product;
+
+      return {
+        productId: product.id,
+        quantity: item.quantity,
+        value: Number(product.price) * Number(item.quantity),
+      };
+    });
+
+    setIsDonationBasket(true);
+    setItemsDonation(items);
     setIsOpenIdentificationDialog(true);
   };
 
@@ -250,7 +291,9 @@ export default function Campaign() {
             Cada trilha que você completa ajuda a fornecer alimentos para quem
             precisa. Conquiste novos caminhos e faça a diferença
           </p>
-          <Button className="mt-4 bg-primary">Doar uma cesta</Button>
+          <Button className="mt-4 bg-primary" onClick={donateBasket}>
+            Doar uma cesta básica
+          </Button>
         </div>
         <div className="relative h-72 w-full flex justify-start mt-4">
           <Image alt="Logo da Calango" src="/trip.svg" fill />

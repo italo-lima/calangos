@@ -18,7 +18,7 @@ import {
   BookImage,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useCampaign } from '@/app/_hooks/useCampaign';
+import { useCampaign } from '@/app/hooks/use-campaign';
 
 export const Header = () => {
   const { campaign, isValidCampaign } = useCampaign();

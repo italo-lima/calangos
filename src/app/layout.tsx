@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
-import './globals.css';
-import 'react-slideshow-image/dist/styles.css';
+
 import { Header } from './_components/header';
 import { Footer } from './_components/footer';
-import { CampaignProvider } from './_hooks/useCampaign';
+
+import './globals.css';
+import 'react-slideshow-image/dist/styles.css';
+import { Toaster } from './_components/ui/toaster';
+import { CampaignProvider } from './hooks/use-campaign';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -33,6 +36,7 @@ export default function RootLayout({
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased scroll-smooth`}
         >
+          <Toaster />
           <Header />
           {children}
           <Footer />

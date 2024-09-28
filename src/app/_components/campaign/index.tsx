@@ -1,4 +1,4 @@
-import { useCampaign } from '@/app/_hooks/useCampaign';
+import { useCampaign } from '@/app/hooks/use-campaign';
 import { Button } from '../ui/button';
 
 export const Campaign = () => {
